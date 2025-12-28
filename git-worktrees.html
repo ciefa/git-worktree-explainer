@@ -1,0 +1,2583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Git Worktrees — Interactive Guide</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0e14;
+            --bg-card: #131920;
+            --bg-elevated: #1a2129;
+            --accent-primary: #00d9ff;
+            --accent-secondary: #7b61ff;
+            --accent-tertiary: #ff6b8a;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --border: #21262d;
+            --success: #3fb950;
+            --warning: #d29922;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+
+        /* Noise texture overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.03;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 30%, rgba(0, 217, 255, 0.08) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 70%, rgba(123, 97, 255, 0.06) 0%, transparent 50%);
+            animation: drift 20s ease-in-out infinite;
+        }
+
+        @keyframes drift {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            50% { transform: translate(-2%, -2%) rotate(1deg); }
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            max-width: 900px;
+        }
+
+        .hero-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            margin-bottom: 1.5rem;
+            opacity: 0;
+            animation: fadeUp 0.8s ease forwards 0.2s;
+        }
+
+        .hero-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(3rem, 10vw, 7rem);
+            font-weight: 800;
+            line-height: 1.05;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-primary) 50%, var(--accent-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            opacity: 0;
+            animation: fadeUp 0.8s ease forwards 0.4s;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 3rem;
+            opacity: 0;
+            animation: fadeUp 0.8s ease forwards 0.6s;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .scroll-indicator {
+            position: absolute;
+            bottom: 3rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-family: 'JetBrains Mono', monospace;
+            opacity: 0;
+            animation: fadeUp 0.8s ease forwards 1s;
+        }
+
+        .scroll-indicator::after {
+            content: '';
+            width: 1px;
+            height: 40px;
+            background: linear-gradient(to bottom, var(--accent-primary), transparent);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        /* Navigation */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            z-index: 100;
+            background: linear-gradient(to bottom, var(--bg-dark), transparent);
+        }
+
+        .nav a {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s ease;
+        }
+
+        .nav a:hover {
+            color: var(--accent-primary);
+        }
+
+        /* Sections */
+        .section {
+            padding: 6rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-header {
+            margin-bottom: 4rem;
+        }
+
+        .section-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--accent-secondary);
+            letter-spacing: 0.2em;
+            margin-bottom: 1rem;
+        }
+
+        .section-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .section-desc {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 700px;
+        }
+
+        /* Concept Visualization */
+        .visualization {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 3rem;
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .visualization::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+        }
+
+        .diagram {
+            display: flex;
+            flex-direction: column;
+            gap: 3rem;
+        }
+
+        .repo-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .repo-box {
+            background: var(--bg-elevated);
+            border: 2px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            min-width: 280px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .repo-box.main {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 30px rgba(0, 217, 255, 0.1);
+        }
+
+        .repo-box.linked {
+            border-color: var(--accent-secondary);
+            box-shadow: 0 0 30px rgba(123, 97, 255, 0.1);
+        }
+
+        .repo-box-label {
+            position: absolute;
+            top: -12px;
+            left: 20px;
+            background: var(--bg-card);
+            padding: 0 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .repo-box.main .repo-box-label {
+            color: var(--accent-primary);
+        }
+
+        .repo-box.linked .repo-box-label {
+            color: var(--accent-secondary);
+        }
+
+        .repo-path {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .branch-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-dark);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+        }
+
+        .branch-icon {
+            width: 16px;
+            height: 16px;
+            color: var(--success);
+        }
+
+        .shared-resources {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+            padding: 2rem;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            border: 1px dashed var(--border);
+        }
+
+        .shared-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .shared-item::before {
+            content: '●';
+            color: var(--success);
+        }
+
+        .connector {
+            position: relative;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .connector::before {
+            content: '';
+            position: absolute;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(to bottom, var(--accent-primary), var(--accent-secondary));
+        }
+
+        .connector-label {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--bg-card);
+            padding: 0.25rem 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            border-radius: 4px;
+        }
+
+        /* Interactive Terminal */
+        .terminal {
+            background: #0d1117;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 2rem 0;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        }
+
+        .terminal-header {
+            background: #161b22;
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background: #ff5f56; }
+        .terminal-dot.yellow { background: #ffbd2e; }
+        .terminal-dot.green { background: #27c93f; }
+
+        .terminal-title {
+            flex: 1;
+            text-align: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .terminal-body {
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.8;
+            min-height: 200px;
+        }
+
+        .terminal-line {
+            margin-bottom: 0.5rem;
+            opacity: 0;
+            animation: typeLine 0.3s ease forwards;
+        }
+
+        .terminal-line.visible {
+            opacity: 1;
+        }
+
+        .prompt {
+            color: var(--accent-primary);
+        }
+
+        .command {
+            color: var(--text-primary);
+        }
+
+        .output {
+            color: var(--text-secondary);
+            padding-left: 1rem;
+        }
+
+        .output.success {
+            color: var(--success);
+        }
+
+        /* Interactive Demo */
+        .demo-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .demo-btn {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            padding: 0.75rem 1.5rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .demo-btn:hover {
+            border-color: var(--accent-primary);
+            background: rgba(0, 217, 255, 0.1);
+        }
+
+        .demo-btn.active {
+            border-color: var(--accent-primary);
+            background: rgba(0, 217, 255, 0.15);
+            color: var(--accent-primary);
+        }
+
+        .demo-btn-icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Use Cases Grid */
+        .use-cases {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .use-case {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .use-case:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent-primary);
+            box-shadow: 0 10px 40px rgba(0, 217, 255, 0.1);
+        }
+
+        .use-case-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .use-case-icon svg {
+            width: 24px;
+            height: 24px;
+            color: var(--bg-dark);
+        }
+
+        .use-case h3 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .use-case p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        /* Commands Reference */
+        .commands-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .command-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .command-item:hover {
+            border-color: var(--accent-primary);
+        }
+
+        .command-header {
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            background: var(--bg-elevated);
+        }
+
+        .command-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            color: var(--accent-primary);
+        }
+
+        .command-toggle {
+            width: 24px;
+            height: 24px;
+            color: var(--text-muted);
+            transition: transform 0.3s ease;
+        }
+
+        .command-item.open .command-toggle {
+            transform: rotate(180deg);
+        }
+
+        .command-content {
+            padding: 0 1.5rem;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .command-item.open .command-content {
+            padding: 1.5rem;
+            max-height: 500px;
+        }
+
+        .command-desc {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .command-example {
+            background: #0d1117;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+        }
+
+        /* Step by Step */
+        .steps {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            position: relative;
+        }
+
+        .steps::before {
+            content: '';
+            position: absolute;
+            left: 24px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, var(--accent-primary), var(--accent-secondary), var(--accent-tertiary));
+        }
+
+        .step {
+            display: flex;
+            gap: 2rem;
+            align-items: flex-start;
+        }
+
+        .step-number {
+            width: 50px;
+            height: 50px;
+            background: var(--bg-card);
+            border: 2px solid var(--accent-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: var(--accent-primary);
+            flex-shrink: 0;
+            z-index: 1;
+        }
+
+        .step-content {
+            flex: 1;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .step-title {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .step-desc {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .step-code {
+            background: #0d1117;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+        }
+
+        /* Tips Section */
+        .tips-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .tip {
+            background: var(--bg-card);
+            border-left: 3px solid var(--warning);
+            padding: 1.5rem;
+            border-radius: 0 12px 12px 0;
+        }
+
+        .tip-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tip-title::before {
+            content: '💡';
+        }
+
+        .tip p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .footer a {
+            color: var(--accent-primary);
+            text-decoration: none;
+        }
+
+        /* Interactive Worktree Visualization */
+        .worktree-viz {
+            padding: 2rem;
+            background: var(--bg-elevated);
+            border-radius: 16px;
+            margin: 2rem 0;
+        }
+
+        .worktree-viz-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .worktree-viz-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .worktree-add-btn {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            padding: 0.5rem 1rem;
+            background: var(--accent-primary);
+            border: none;
+            color: var(--bg-dark);
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .worktree-add-btn:hover {
+            background: var(--text-primary);
+        }
+
+        .worktree-grid {
+            display: flex;
+            gap: 1rem;
+            overflow-x: auto;
+            padding-bottom: 1rem;
+        }
+
+        .worktree-card {
+            min-width: 220px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            animation: slideIn 0.4s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .worktree-card.main {
+            border-color: var(--accent-primary);
+        }
+
+        .worktree-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .worktree-type {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(0, 217, 255, 0.15);
+            color: var(--accent-primary);
+        }
+
+        .worktree-card.main .worktree-type {
+            background: rgba(0, 217, 255, 0.2);
+        }
+
+        .worktree-remove {
+            width: 20px;
+            height: 20px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            opacity: 0.5;
+            transition: all 0.3s ease;
+        }
+
+        .worktree-remove:hover {
+            opacity: 1;
+            color: var(--accent-tertiary);
+        }
+
+        .worktree-card.main .worktree-remove {
+            display: none;
+        }
+
+        .worktree-path {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .worktree-branch {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--success);
+        }
+
+        /* Emergency Workflow Section - New Interactive Version */
+        .workflow-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Git Graph */
+        .git-graph {
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+
+        .git-graph svg {
+            width: 100%;
+            height: 110px;
+        }
+
+        .branch-line {
+            stroke: var(--border);
+            stroke-width: 3;
+            stroke-linecap: round;
+            transition: all 0.5s ease;
+        }
+
+        .branch-line.main-line { stroke: var(--text-muted); }
+        .branch-line.feature-line { stroke: var(--accent-secondary); }
+        .branch-line.hotfix-line { stroke: var(--accent-tertiary); }
+
+        .commit {
+            fill: var(--bg-card);
+            stroke-width: 3;
+            transition: all 0.3s ease;
+        }
+
+        .commit.main-commit { stroke: var(--text-muted); }
+        .commit.feature-commit { stroke: var(--accent-secondary); fill: var(--accent-secondary); }
+        .commit.hotfix-commit { stroke: var(--accent-tertiary); fill: var(--accent-tertiary); }
+        .commit.merge-commit { stroke: var(--success); }
+        .commit.active { transform: scale(1.3); filter: drop-shadow(0 0 8px currentColor); }
+
+        .head-indicator rect {
+            fill: var(--accent-primary);
+        }
+
+        .head-indicator text {
+            fill: var(--bg-dark);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .branch-label {
+            fill: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+        }
+
+        .branch-label-group {
+            transition: opacity 0.4s ease;
+        }
+
+        /* Breadcrumb Status */
+        .workflow-breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+        }
+
+        .breadcrumb-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            transition: all 0.3s ease;
+        }
+
+        .breadcrumb-item.active {
+            color: var(--text-primary);
+        }
+
+        .breadcrumb-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+
+        .breadcrumb-dot.branch { background: var(--accent-secondary); }
+        .breadcrumb-dot.modified { background: var(--warning); }
+        .breadcrumb-dot.hotfix { background: var(--accent-tertiary); }
+        .breadcrumb-dot.success { background: var(--success); }
+
+        .breadcrumb-separator {
+            color: var(--text-muted);
+        }
+
+        /* Step Indicator */
+        .workflow-step-indicator {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .step-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--accent-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .step-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* Main Content Area */
+        .workflow-main {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* File Tree */
+        .file-tree {
+            width: 200px;
+            flex-shrink: 0;
+            background: var(--bg-elevated);
+            border-radius: 10px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .file-tree-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .file-tree-header svg {
+            color: var(--accent-primary);
+        }
+
+        .file-tree-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .file-tree-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+
+        .file-tree-item.folder {
+            color: var(--text-primary);
+        }
+
+        .file-tree-item.modified {
+            color: var(--warning);
+        }
+
+        .file-tree-item.added {
+            color: var(--success);
+        }
+
+        .file-tree-item .indent {
+            width: 12px;
+        }
+
+        .file-tree-icon {
+            width: 14px;
+            height: 14px;
+            opacity: 0.7;
+        }
+
+        /* Terminals Container */
+        .terminals-container {
+            flex: 1;
+            display: flex;
+            gap: 1rem;
+            min-width: 0;
+        }
+
+        .terminal-wrapper {
+            flex: 1;
+            background: #0d1117;
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .terminal-wrapper.split {
+            animation: slideInRight 0.4s ease;
+        }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .terminal-tab {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1rem;
+            background: #161b22;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .terminal-tab.hotfix {
+            background: rgba(255, 107, 138, 0.1);
+            color: var(--accent-tertiary);
+        }
+
+        .terminal-tab-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+        }
+
+        .terminal-tab.hotfix .terminal-tab-dot {
+            background: var(--accent-tertiary);
+        }
+
+        .terminal-tab.frozen {
+            background: rgba(139, 148, 158, 0.1);
+            opacity: 0.6;
+        }
+
+        .terminal-tab.frozen .terminal-tab-dot {
+            background: var(--text-muted);
+        }
+
+        .terminal-body {
+            flex: 1;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            min-height: 200px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .terminal-output {
+            margin-bottom: 0.5rem;
+        }
+
+        .terminal-output-line {
+            margin-bottom: 0.25rem;
+            opacity: 0;
+            animation: fadeInLine 0.2s ease forwards;
+        }
+
+        @keyframes fadeInLine {
+            to { opacity: 1; }
+        }
+
+        .terminal-output-line.command {
+            color: var(--text-primary);
+        }
+
+        .terminal-output-line.command::before {
+            content: '$ ';
+            color: var(--accent-primary);
+        }
+
+        .terminal-output-line.output {
+            color: var(--text-secondary);
+            padding-left: 1rem;
+        }
+
+        .terminal-output-line.success {
+            color: var(--success);
+            padding-left: 1rem;
+        }
+
+        .terminal-output-line.error {
+            color: var(--accent-tertiary);
+            padding-left: 1rem;
+        }
+
+        .terminal-output-line.comment {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .terminal-input-line {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .terminal-prompt {
+            color: var(--accent-primary);
+        }
+
+        .terminal-command {
+            color: var(--text-primary);
+        }
+
+        .terminal-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 16px;
+            background: var(--accent-primary);
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        /* Quiz Mode */
+        .quiz-container {
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .quiz-question {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        .quiz-options {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .quiz-option {
+            padding: 0.75rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+        }
+
+        .quiz-option:hover {
+            border-color: var(--accent-primary);
+            color: var(--text-primary);
+        }
+
+        .quiz-option.correct {
+            border-color: var(--success);
+            background: rgba(63, 185, 80, 0.1);
+            color: var(--success);
+        }
+
+        .quiz-option.incorrect {
+            border-color: var(--accent-tertiary);
+            background: rgba(255, 107, 138, 0.1);
+            color: var(--accent-tertiary);
+        }
+
+        .quiz-feedback {
+            margin-top: 1rem;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .quiz-feedback.show {
+            display: block;
+        }
+
+        .quiz-feedback.correct {
+            background: rgba(63, 185, 80, 0.1);
+            color: var(--success);
+            border-left: 3px solid var(--success);
+        }
+
+        .quiz-feedback.incorrect {
+            background: rgba(255, 107, 138, 0.1);
+            color: var(--accent-tertiary);
+            border-left: 3px solid var(--accent-tertiary);
+        }
+
+        /* Action Button */
+        .workflow-actions {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.875rem 2rem;
+            background: var(--accent-primary);
+            border: none;
+            border-radius: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--bg-dark);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            background: var(--text-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 217, 255, 0.2);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .action-btn-key {
+            padding: 0.25rem 0.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .action-btn.alert {
+            background: var(--accent-tertiary);
+        }
+
+        .action-btn.success {
+            background: var(--success);
+        }
+
+        /* Narrative Text */
+        .workflow-narrative {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            padding: 1rem;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .workflow-narrative strong {
+            color: var(--text-primary);
+        }
+
+        .workflow-narrative .highlight {
+            color: var(--accent-primary);
+        }
+
+        .workflow-narrative .alert {
+            color: var(--accent-tertiary);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav {
+                padding: 1rem;
+                gap: 1rem;
+            }
+
+            .section {
+                padding: 4rem 1.5rem;
+            }
+
+            .visualization {
+                padding: 1.5rem;
+            }
+
+            .repo-container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .shared-resources {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .step {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .steps::before {
+                display: none;
+            }
+
+            .workflow-main {
+                flex-direction: column;
+            }
+
+            .file-tree {
+                width: 100%;
+            }
+
+            .terminals-container {
+                flex-direction: column;
+            }
+
+            .workflow-breadcrumb {
+                font-size: 0.75rem;
+            }
+
+            .git-graph svg {
+                height: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="#what">What</a>
+        <a href="#why">Why</a>
+        <a href="#how">How</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#commands">Commands</a>
+        <a href="#tips">Tips</a>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-label">An Interactive Guide</div>
+            <h1 class="hero-title">Git Worktrees</h1>
+            <p class="hero-subtitle">Work on multiple branches simultaneously without stashing, switching, or cloning. Master the art of parallel development.</p>
+        </div>
+        <div class="scroll-indicator">Scroll to explore</div>
+    </section>
+
+    <section class="section" id="what">
+        <div class="section-header">
+            <div class="section-number">01</div>
+            <h2 class="section-title">What are Worktrees?</h2>
+            <p class="section-desc">A worktree lets you have multiple working directories attached to a single Git repository. Each worktree can have a different branch checked out.</p>
+        </div>
+
+        <div class="visualization">
+            <div class="diagram">
+                <div class="repo-container">
+                    <div class="repo-box main">
+                        <span class="repo-box-label">Main Worktree</span>
+                        <div class="repo-path">~/projects/my-app</div>
+                        <div class="branch-tag">
+                            <svg class="branch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9"/>
+                            </svg>
+                            main
+                        </div>
+                    </div>
+                    <div class="repo-box linked">
+                        <span class="repo-box-label">Linked Worktree</span>
+                        <div class="repo-path">~/projects/my-app-feature</div>
+                        <div class="branch-tag">
+                            <svg class="branch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9"/>
+                            </svg>
+                            feature/new-ui
+                        </div>
+                    </div>
+                    <div class="repo-box linked">
+                        <span class="repo-box-label">Linked Worktree</span>
+                        <div class="repo-path">~/projects/my-app-hotfix</div>
+                        <div class="branch-tag">
+                            <svg class="branch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9"/>
+                            </svg>
+                            hotfix/urgent-bug
+                        </div>
+                    </div>
+                </div>
+
+                <div class="connector">
+                    <span class="connector-label">share</span>
+                </div>
+
+                <div class="shared-resources">
+                    <div class="shared-item">.git directory</div>
+                    <div class="shared-item">Object database</div>
+                    <div class="shared-item">Remote configurations</div>
+                    <div class="shared-item">Refs & history</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="worktree-viz">
+            <div class="worktree-viz-header">
+                <span class="worktree-viz-title">Interactive Worktree Simulator</span>
+                <button class="worktree-add-btn" onclick="addWorktree()">+ Add Worktree</button>
+            </div>
+            <div class="worktree-grid" id="worktreeGrid">
+                <div class="worktree-card main">
+                    <div class="worktree-card-header">
+                        <span class="worktree-type">Main</span>
+                        <button class="worktree-remove">×</button>
+                    </div>
+                    <div class="worktree-path">~/project</div>
+                    <div class="worktree-branch">main</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="why">
+        <div class="section-header">
+            <div class="section-number">02</div>
+            <h2 class="section-title">Why Use Worktrees?</h2>
+            <p class="section-desc">Stop interrupting your flow. Worktrees solve real problems developers face every day.</p>
+        </div>
+
+        <div class="use-cases">
+            <div class="use-case">
+                <div class="use-case-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                </div>
+                <h3>Emergency Hotfixes</h3>
+                <p>Boss needs an urgent fix? Create a worktree, fix it, and return to your work—no stashing required.</p>
+            </div>
+
+            <div class="use-case">
+                <div class="use-case-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                    </svg>
+                </div>
+                <h3>Long-Running Tests</h3>
+                <p>Run your test suite in one worktree while continuing development in another. Parallel productivity.</p>
+            </div>
+
+            <div class="use-case">
+                <div class="use-case-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="8.5" cy="7" r="4"/>
+                        <path d="M20 8v6M23 11h-6"/>
+                    </svg>
+                </div>
+                <h3>Code Reviews</h3>
+                <p>Review a colleague's branch in a separate worktree while your work stays untouched.</p>
+            </div>
+
+            <div class="use-case">
+                <div class="use-case-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                    </svg>
+                </div>
+                <h3>Compare Implementations</h3>
+                <p>Keep different approaches side-by-side. Compare, benchmark, and pick the winner.</p>
+            </div>
+
+            <div class="use-case">
+                <div class="use-case-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="3" y1="9" x2="21" y2="9"/>
+                        <line x1="9" y1="21" x2="9" y2="9"/>
+                    </svg>
+                </div>
+                <h3>Context Preservation</h3>
+                <p>Each worktree maintains its own IDE state, terminal history, and uncommitted changes.</p>
+            </div>
+
+            <div class="use-case">
+                <div class="use-case-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M8 12h8M12 8v8"/>
+                    </svg>
+                </div>
+                <h3>No Extra Clones</h3>
+                <p>Save disk space. All worktrees share the same .git directory and object database.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="how">
+        <div class="section-header">
+            <div class="section-number">03</div>
+            <h2 class="section-title">How It Works</h2>
+            <p class="section-desc">Follow along with this interactive demo to see worktrees in action.</p>
+        </div>
+
+        <div class="demo-controls">
+            <button class="demo-btn active" onclick="runDemo('create', this)">
+                <svg class="demo-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+                Create Worktree
+            </button>
+            <button class="demo-btn" onclick="runDemo('list', this)">
+                <svg class="demo-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                List Worktrees
+            </button>
+            <button class="demo-btn" onclick="runDemo('remove', this)">
+                <svg class="demo-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3,6 5,6 21,6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+                Remove Worktree
+            </button>
+        </div>
+
+        <div class="terminal">
+            <div class="terminal-header">
+                <span class="terminal-dot red"></span>
+                <span class="terminal-dot yellow"></span>
+                <span class="terminal-dot green"></span>
+                <span class="terminal-title">Terminal — git-worktree-demo</span>
+            </div>
+            <div class="terminal-body" id="terminalBody">
+                <!-- Terminal content will be injected here -->
+            </div>
+        </div>
+
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h3 class="step-title">Create a New Worktree</h3>
+                    <p class="step-desc">Creates a new directory with a checkout of the specified branch. The branch must exist or use -b to create it.</p>
+                    <div class="step-code">
+                        <span style="color: var(--accent-primary)">$</span> git worktree add ../my-feature feature-branch<br>
+                        <span style="color: var(--text-secondary)"># Or create a new branch automatically:</span><br>
+                        <span style="color: var(--accent-primary)">$</span> git worktree add -b new-feature ../new-feature
+                    </div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h3 class="step-title">Work in Your Worktree</h3>
+                    <p class="step-desc">Navigate to the new directory and work normally. All git commands work as expected.</p>
+                    <div class="step-code">
+                        <span style="color: var(--accent-primary)">$</span> cd ../my-feature<br>
+                        <span style="color: var(--accent-primary)">$</span> code .  <span style="color: var(--text-secondary)"># Open in your editor</span><br>
+                        <span style="color: var(--text-secondary)"># Make changes, commit, push...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h3 class="step-title">List All Worktrees</h3>
+                    <p class="step-desc">See all your active worktrees and their current branches at a glance.</p>
+                    <div class="step-code">
+                        <span style="color: var(--accent-primary)">$</span> git worktree list<br>
+                        <span style="color: var(--text-secondary)">/home/user/project       abc1234 [main]</span><br>
+                        <span style="color: var(--text-secondary)">/home/user/my-feature    def5678 [feature-branch]</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <h3 class="step-title">Remove When Done</h3>
+                    <p class="step-desc">Clean up the worktree when you're finished. This removes the directory and the internal reference.</p>
+                    <div class="step-code">
+                        <span style="color: var(--accent-primary)">$</span> git worktree remove ../my-feature<br>
+                        <span style="color: var(--text-secondary)"># Or force remove if there are uncommitted changes:</span><br>
+                        <span style="color: var(--accent-primary)">$</span> git worktree remove --force ../my-feature
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="workflow">
+        <div class="section-header">
+            <div class="section-number">04</div>
+            <h2 class="section-title">Real-World Workflow</h2>
+            <p class="section-desc">Experience how worktrees save the day. Follow along interactively.</p>
+        </div>
+
+        <div class="workflow-container">
+            <!-- Git Graph Visualization -->
+            <div class="git-graph" id="gitGraph">
+                <svg viewBox="0 0 800 100" preserveAspectRatio="xMidYMid meet">
+                    <!-- Main branch line -->
+                    <line class="branch-line main-line" x1="50" y1="60" x2="750" y2="60" />
+                    
+                    <!-- Feature branch line (hidden initially) -->
+                    <path class="branch-line feature-line" d="M200,60 Q250,60 280,40 L420,40" fill="none" style="opacity: 0" />
+                    
+                    <!-- Hotfix branch line (hidden initially) -->
+                    <path class="branch-line hotfix-line" d="M350,60 Q400,60 430,80 L550,80" fill="none" style="opacity: 0" />
+                    
+                    <!-- Commits on main -->
+                    <circle class="commit main-commit" cx="100" cy="60" r="8" />
+                    <circle class="commit main-commit" cx="200" cy="60" r="8" />
+                    <circle class="commit main-commit" cx="350" cy="60" r="8" />
+                    
+                    <!-- Feature branch commits (hidden initially) -->
+                    <circle class="commit feature-commit" cx="320" cy="40" r="7" style="opacity: 0" />
+                    <circle class="commit feature-commit" cx="420" cy="40" r="7" style="opacity: 0" />
+                    
+                    <!-- Hotfix branch commits (hidden initially) -->
+                    <circle class="commit hotfix-commit" cx="480" cy="80" r="7" style="opacity: 0" />
+                    <circle class="commit hotfix-commit" cx="550" cy="80" r="7" style="opacity: 0" />
+                    
+                    <!-- Merge commit (hidden initially) -->
+                    <circle class="commit merge-commit" cx="650" cy="60" r="8" style="opacity: 0" />
+                    
+                    <!-- HEAD indicator for main -->
+                    <g class="head-indicator main-head" transform="translate(350, 60)">
+                        <rect x="-28" y="-32" width="56" height="20" rx="4" />
+                        <text x="0" y="-18" text-anchor="middle">HEAD</text>
+                    </g>
+                    
+                    <!-- HEAD indicator for feature (hidden initially) -->
+                    <g class="head-indicator feature-head" transform="translate(420, 40)" style="opacity: 0">
+                        <rect x="-28" y="-32" width="56" height="20" rx="4" fill="var(--accent-secondary)" />
+                        <text x="0" y="-18" text-anchor="middle">HEAD</text>
+                    </g>
+                    
+                    <!-- Branch labels with backgrounds -->
+                    <g class="branch-label-group">
+                        <rect x="70" y="72" width="60" height="18" rx="4" fill="var(--bg-card)" />
+                        <text class="branch-label" x="100" y="85" text-anchor="middle">main</text>
+                    </g>
+                    
+                    <g class="branch-label-group feature-label" style="opacity: 0">
+                        <rect x="340" y="12" width="100" height="18" rx="4" fill="var(--accent-secondary)" fill-opacity="0.2" />
+                        <text class="branch-label" x="390" y="25" text-anchor="middle" fill="var(--accent-secondary)">feature-login</text>
+                    </g>
+                    
+                    <g class="branch-label-group hotfix-label" style="opacity: 0">
+                        <rect x="500" y="88" width="60" height="18" rx="4" fill="var(--accent-tertiary)" fill-opacity="0.2" />
+                        <text class="branch-label" x="530" y="101" text-anchor="middle" fill="var(--accent-tertiary)">hotfix</text>
+                    </g>
+                </svg>
+            </div>
+
+            <!-- Breadcrumb Status -->
+            <div class="workflow-breadcrumb" id="workflowBreadcrumb">
+                <span class="breadcrumb-item active">
+                    <span class="breadcrumb-dot"></span>
+                    ~/myproject
+                </span>
+                <span class="breadcrumb-separator">→</span>
+                <span class="breadcrumb-item">
+                    <span class="breadcrumb-dot branch"></span>
+                    feature-login
+                </span>
+                <span class="breadcrumb-separator">→</span>
+                <span class="breadcrumb-item">
+                    <span class="breadcrumb-dot modified"></span>
+                    3 files modified
+                </span>
+            </div>
+
+            <!-- Step Indicator -->
+            <div class="workflow-step-indicator">
+                <span class="step-text" id="stepText">Step 1 of 6</span>
+                <span class="step-title" id="stepTitle">Working on Feature</span>
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="workflow-main">
+                <!-- File Tree -->
+                <div class="file-tree" id="fileTree">
+                    <div class="file-tree-header">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        <span id="fileTreeRoot">myproject</span>
+                    </div>
+                    <div class="file-tree-content" id="fileTreeContent">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Terminal(s) -->
+                <div class="terminals-container" id="terminalsContainer">
+                    <div class="terminal-wrapper" id="terminalMain">
+                        <div class="terminal-tab">
+                            <span class="terminal-tab-dot"></span>
+                            <span class="terminal-tab-title">~/myproject</span>
+                        </div>
+                        <div class="terminal-body" id="terminalMainBody">
+                            <div class="terminal-output" id="terminalMainOutput"></div>
+                            <div class="terminal-input-line" id="terminalMainInput">
+                                <span class="terminal-prompt">$</span>
+                                <span class="terminal-command" id="terminalMainCommand"></span>
+                                <span class="terminal-cursor"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Second terminal for split view (hidden initially) -->
+                    <div class="terminal-wrapper split" id="terminalHotfix" style="display: none;">
+                        <div class="terminal-tab hotfix">
+                            <span class="terminal-tab-dot"></span>
+                            <span class="terminal-tab-title">~/hotfix</span>
+                        </div>
+                        <div class="terminal-body" id="terminalHotfixBody">
+                            <div class="terminal-output" id="terminalHotfixOutput"></div>
+                            <div class="terminal-input-line">
+                                <span class="terminal-prompt">$</span>
+                                <span class="terminal-command" id="terminalHotfixCommand"></span>
+                                <span class="terminal-cursor"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quiz Mode -->
+            <div class="quiz-container" id="quizContainer" style="display: none;">
+                <div class="quiz-question" id="quizQuestion"></div>
+                <div class="quiz-options" id="quizOptions"></div>
+                <div class="quiz-feedback" id="quizFeedback"></div>
+            </div>
+
+            <!-- Action Button -->
+            <div class="workflow-actions">
+                <button class="action-btn" id="actionBtn" onclick="executeAction()">
+                    <span class="action-btn-text">Run Command</span>
+                    <span class="action-btn-key">Enter ↵</span>
+                </button>
+            </div>
+
+            <!-- Narrative Text -->
+            <div class="workflow-narrative" id="workflowNarrative">
+                You're deep in feature development...
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="commands">
+        <div class="section-header">
+            <div class="section-number">05</div>
+            <h2 class="section-title">Command Reference</h2>
+            <p class="section-desc">All the commands you need, with examples you can copy.</p>
+        </div>
+
+        <div class="commands-list">
+            <div class="command-item open">
+                <div class="command-header" onclick="toggleCommand(this)">
+                    <span class="command-name">git worktree add</span>
+                    <svg class="command-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="command-content">
+                    <p class="command-desc">Create a new worktree at a specified path. Optionally create a new branch.</p>
+                    <div class="command-example">
+# Basic: checkout existing branch
+git worktree add ../hotfix hotfix-branch
+
+# Create new branch from HEAD
+git worktree add -b feature/login ../login
+
+# Create from specific commit
+git worktree add -b experiment ../exp abc1234
+
+# Detached HEAD (no branch)
+git worktree add --detach ../temp HEAD~5
+                    </div>
+                </div>
+            </div>
+
+            <div class="command-item">
+                <div class="command-header" onclick="toggleCommand(this)">
+                    <span class="command-name">git worktree list</span>
+                    <svg class="command-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="command-content">
+                    <p class="command-desc">List all worktrees associated with this repository.</p>
+                    <div class="command-example">
+# Simple list
+git worktree list
+
+# Verbose output (shows lock reasons)
+git worktree list -v
+
+# Machine-readable format
+git worktree list --porcelain
+                    </div>
+                </div>
+            </div>
+
+            <div class="command-item">
+                <div class="command-header" onclick="toggleCommand(this)">
+                    <span class="command-name">git worktree remove</span>
+                    <svg class="command-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="command-content">
+                    <p class="command-desc">Remove a worktree and its administrative files. Worktree must be clean unless forced.</p>
+                    <div class="command-example">
+# Standard removal
+git worktree remove ../hotfix
+
+# Force remove (uncommitted changes)
+git worktree remove --force ../hotfix
+                    </div>
+                </div>
+            </div>
+
+            <div class="command-item">
+                <div class="command-header" onclick="toggleCommand(this)">
+                    <span class="command-name">git worktree lock / unlock</span>
+                    <svg class="command-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="command-content">
+                    <p class="command-desc">Prevent a worktree from being pruned. Useful for external drives or network shares.</p>
+                    <div class="command-example">
+# Lock with reason
+git worktree lock --reason "On USB drive" ../portable
+
+# Unlock when back online
+git worktree unlock ../portable
+                    </div>
+                </div>
+            </div>
+
+            <div class="command-item">
+                <div class="command-header" onclick="toggleCommand(this)">
+                    <span class="command-name">git worktree move</span>
+                    <svg class="command-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="command-content">
+                    <p class="command-desc">Move a worktree to a new location. Updates all internal references.</p>
+                    <div class="command-example">
+# Move to new location
+git worktree move ../old-path ../new-path
+                    </div>
+                </div>
+            </div>
+
+            <div class="command-item">
+                <div class="command-header" onclick="toggleCommand(this)">
+                    <span class="command-name">git worktree prune</span>
+                    <svg class="command-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="command-content">
+                    <p class="command-desc">Clean up stale worktree administrative files (for manually deleted worktrees).</p>
+                    <div class="command-example">
+# See what would be pruned
+git worktree prune --dry-run
+
+# Actually prune
+git worktree prune -v
+                    </div>
+                </div>
+            </div>
+
+            <div class="command-item">
+                <div class="command-header" onclick="toggleCommand(this)">
+                    <span class="command-name">git worktree repair</span>
+                    <svg class="command-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="command-content">
+                    <p class="command-desc">Repair worktree links after manually moving the main repository or worktrees.</p>
+                    <div class="command-example">
+# Repair from main worktree
+git worktree repair
+
+# Repair after moving linked worktrees
+git worktree repair ../moved-worktree
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="tips">
+        <div class="section-header">
+            <div class="section-number">06</div>
+            <h2 class="section-title">Pro Tips</h2>
+            <p class="section-desc">Level up your worktree workflow with these expert tips.</p>
+        </div>
+
+        <div class="tips-grid">
+            <div class="tip">
+                <div class="tip-title">One Branch Per Worktree</div>
+                <p>Git won't let you check out the same branch in two worktrees. This prevents confusion and merge conflicts with yourself.</p>
+            </div>
+
+            <div class="tip">
+                <div class="tip-title">Name Directories Clearly</div>
+                <p>Use meaningful names like <code>project-feature-xyz</code> rather than <code>temp1</code>. Future you will thank present you.</p>
+            </div>
+
+            <div class="tip">
+                <div class="tip-title">Keep Worktrees Nearby</div>
+                <p>Create worktrees as siblings to your main repo (e.g., <code>../project-hotfix</code>). Keeps your workspace organized.</p>
+            </div>
+
+            <div class="tip">
+                <div class="tip-title">Use With Bare Repos</div>
+                <p>Clone with <code>--bare</code> and use only worktrees. Clean separation between the repo and working copies.</p>
+            </div>
+
+            <div class="tip">
+                <div class="tip-title">IDEs Love Worktrees</div>
+                <p>Open each worktree in a separate IDE window. Each maintains its own state, breakpoints, and terminal history.</p>
+            </div>
+
+            <div class="tip">
+                <div class="tip-title">Clean Up After Merging</div>
+                <p>Remove worktrees after merging branches. Use <code>git worktree list</code> regularly to keep things tidy.</p>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <p>Built to help you understand Git worktrees. <br>
+        Reference: <a href="https://git-scm.com/docs/git-worktree" target="_blank">Official Git Documentation</a></p>
+    </footer>
+
+    <script>
+        // Interactive Worktree Visualization - declare these first
+        let worktreeCount = 0;
+        const branchNames = ['feature/auth', 'bugfix/login', 'release/v2', 'experiment/ui', 'hotfix/security', 'feature/api'];
+
+        // Terminal Demo
+        const demos = {
+            create: [
+                { type: 'command', text: 'git worktree add -b emergency-fix ../hotfix main' },
+                { type: 'output', text: 'Preparing worktree (new branch \'emergency-fix\')', success: true },
+                { type: 'output', text: 'HEAD is now at a3b8c9d Fix authentication bug', success: true },
+                { type: 'command', text: 'cd ../hotfix' },
+                { type: 'command', text: 'ls -la' },
+                { type: 'output', text: 'drwxr-xr-x  src/' },
+                { type: 'output', text: 'drwxr-xr-x  tests/' },
+                { type: 'output', text: '-rw-r--r--  package.json' },
+                { type: 'output', text: '-rw-r--r--  README.md' },
+                { type: 'output', text: 'lrwxrwxrwx  .git -> /home/user/project/.git/worktrees/hotfix' }
+            ],
+            list: [
+                { type: 'command', text: 'git worktree list' },
+                { type: 'output', text: '/home/user/project          a3b8c9d [main]' },
+                { type: 'output', text: '/home/user/project-feature  f4e5d6c [feature/new-ui]' },
+                { type: 'output', text: '/home/user/hotfix           a3b8c9d [emergency-fix]' },
+                { type: 'command', text: 'git worktree list -v' },
+                { type: 'output', text: '/home/user/project          a3b8c9d [main]' },
+                { type: 'output', text: '/home/user/project-feature  f4e5d6c [feature/new-ui]' },
+                { type: 'output', text: '/home/user/hotfix           a3b8c9d [emergency-fix]' },
+                { type: 'output', text: '/home/user/portable         b7c8d9e [backup] locked', success: false },
+                { type: 'output', text: '    locked: Worktree on external USB drive' }
+            ],
+            remove: [
+                { type: 'command', text: 'git worktree remove ../hotfix' },
+                { type: 'output', text: 'Removing worktree \'../hotfix\'', success: true },
+                { type: 'command', text: 'git worktree list' },
+                { type: 'output', text: '/home/user/project          a3b8c9d [main]' },
+                { type: 'output', text: '/home/user/project-feature  f4e5d6c [feature/new-ui]' }
+            ]
+        };
+
+        function runDemo(type, btn) {
+            // Update active button
+            document.querySelectorAll('.demo-btn').forEach(b => b.classList.remove('active'));
+            if (btn) {
+                btn.classList.add('active');
+            } else {
+                // Initial call - activate first button
+                document.querySelector('.demo-btn').classList.add('active');
+            }
+
+            const terminal = document.getElementById('terminalBody');
+            terminal.innerHTML = '';
+
+            const lines = demos[type];
+            lines.forEach((line, index) => {
+                setTimeout(() => {
+                    const div = document.createElement('div');
+                    div.className = 'terminal-line';
+                    
+                    if (line.type === 'command') {
+                        div.innerHTML = `<span class="prompt">$ </span><span class="command">${line.text}</span>`;
+                    } else {
+                        div.className += line.success === false ? ' output warning' : (line.success ? ' output success' : ' output');
+                        div.textContent = line.text;
+                    }
+                    
+                    terminal.appendChild(div);
+                    setTimeout(() => div.classList.add('visible'), 50);
+                    terminal.scrollTop = terminal.scrollHeight;
+                }, index * 300);
+            });
+        }
+
+        // Initialize with first demo (no button passed)
+        runDemo('create', null);
+
+        // Command accordion
+        function toggleCommand(header) {
+            const item = header.parentElement;
+            const wasOpen = item.classList.contains('open');
+            
+            // Close all
+            document.querySelectorAll('.command-item').forEach(i => i.classList.remove('open'));
+            
+            // Open clicked if it was closed
+            if (!wasOpen) {
+                item.classList.add('open');
+            }
+        }
+
+        function addWorktree() {
+            const grid = document.getElementById('worktreeGrid');
+            const branch = branchNames[worktreeCount % branchNames.length];
+            worktreeCount++;
+
+            const card = document.createElement('div');
+            card.className = 'worktree-card linked';
+            card.innerHTML = `
+                <div class="worktree-card-header">
+                    <span class="worktree-type">Linked</span>
+                    <button class="worktree-remove" onclick="removeWorktree(this)">×</button>
+                </div>
+                <div class="worktree-path">~/project-${branch.split('/')[1]}</div>
+                <div class="worktree-branch">${branch}</div>
+            `;
+
+            grid.appendChild(card);
+        }
+
+        function removeWorktree(btn) {
+            const card = btn.closest('.worktree-card');
+            card.style.animation = 'slideOut 0.3s ease forwards';
+            setTimeout(() => card.remove(), 300);
+        }
+
+        // Add slideOut animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideOut {
+                to { opacity: 0; transform: translateX(-20px); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Smooth scroll for nav links
+        document.querySelectorAll('.nav a').forEach(link => {
+            link.addEventListener('click', e => {
+                e.preventDefault();
+                const target = document.querySelector(link.getAttribute('href'));
+                target.scrollIntoView({ behavior: 'smooth' });
+            });
+        });
+
+        // ==========================================
+        // Interactive Workflow System
+        // ==========================================
+        
+        let workflowStep = 0;
+        let isTyping = false;
+        let typeTimeout = null;
+
+        const fileTreeStates = {
+            myproject: [
+                { name: 'src', type: 'folder', indent: 0 },
+                { name: 'auth', type: 'folder', indent: 1 },
+                { name: 'login.js', type: 'file', indent: 2, status: 'modified' },
+                { name: 'oauth.js', type: 'file', indent: 2, status: 'added' },
+                { name: 'components', type: 'folder', indent: 1 },
+                { name: 'LoginForm.jsx', type: 'file', indent: 2, status: 'modified' },
+                { name: 'Button.jsx', type: 'file', indent: 2 },
+                { name: 'tests', type: 'folder', indent: 0 },
+                { name: 'package.json', type: 'file', indent: 0 },
+            ],
+            hotfix: [
+                { name: 'src', type: 'folder', indent: 0 },
+                { name: 'checkout', type: 'folder', indent: 1 },
+                { name: 'payment.js', type: 'file', indent: 2, status: 'modified' },
+                { name: 'cart.js', type: 'file', indent: 2 },
+                { name: 'components', type: 'folder', indent: 1 },
+                { name: 'tests', type: 'folder', indent: 0 },
+                { name: 'package.json', type: 'file', indent: 0 },
+            ]
+        };
+
+        const workflowScenario = [
+            {
+                step: 1,
+                title: 'Working on Feature',
+                narrative: "You're deep in feature development, halfway through implementing login...",
+                breadcrumb: [
+                    { text: '~/myproject', dot: '', active: true },
+                    { text: 'feature-login', dot: 'branch' },
+                    { text: '3 files modified', dot: 'modified' }
+                ],
+                fileTree: 'myproject',
+                showSplitTerminal: false,
+                actionText: 'Run Command',
+                actionType: 'default',
+                commands: [
+                    { type: 'command', text: 'git status', typing: true },
+                    { type: 'output', text: 'On branch feature-login' },
+                    { type: 'output', text: 'Changes not staged for commit:' },
+                    { type: 'output', text: '  modified: src/auth/login.js' },
+                    { type: 'output', text: '  modified: src/components/LoginForm.jsx' },
+                    { type: 'output', text: 'Untracked files:' },
+                    { type: 'output', text: '  src/auth/oauth.js' },
+                ],
+                gitGraph: { showFeature: true, showHotfix: false, activeCommit: 'feature' }
+            },
+            {
+                step: 2,
+                title: 'Emergency Strikes!',
+                narrative: '<span class="alert">ALERT: Production is down!</span> A critical checkout bug needs fixing. But your feature work is uncommitted...',
+                breadcrumb: [
+                    { text: '~/myproject', dot: '', active: true },
+                    { text: 'feature-login', dot: 'branch' },
+                    { text: 'BLOCKED', dot: 'modified' }
+                ],
+                fileTree: 'myproject',
+                showSplitTerminal: false,
+                actionText: 'What do we do?',
+                actionType: 'alert',
+                quiz: {
+                    question: "You need to fix a bug on main, but you have uncommitted changes. What's the best approach?",
+                    options: [
+                        { text: 'git stash && git checkout main', correct: false, feedback: "Stashing works, but it's risky with complex changes and you lose context." },
+                        { text: 'git commit -m "WIP" && git checkout main', correct: false, feedback: "WIP commits pollute history and you still lose your working context." },
+                        { text: 'git worktree add ../hotfix main', correct: true, feedback: "Yes! Create a separate worktree. Your feature stays untouched." },
+                        { text: 'Clone the repo again', correct: false, feedback: "Works but wastes disk space and time. Worktrees are lighter." },
+                    ]
+                },
+                gitGraph: { showFeature: true, showHotfix: false, activeCommit: 'feature', alert: true }
+            },
+            {
+                step: 3,
+                title: 'Create Hotfix Worktree',
+                narrative: 'Create a new worktree for the hotfix. Your feature work stays <span class="highlight">completely untouched</span>.',
+                breadcrumb: [
+                    { text: '~/myproject', dot: '' },
+                    { text: '~/hotfix', dot: 'hotfix', active: true },
+                    { text: 'main branch', dot: 'branch' }
+                ],
+                fileTree: 'myproject',
+                showSplitTerminal: false,
+                actionText: 'Create Worktree',
+                actionType: 'default',
+                commands: [
+                    { type: 'command', text: 'git worktree add -b hotfix/checkout-bug ../hotfix main', typing: true },
+                    { type: 'success', text: 'Preparing worktree (new branch \'hotfix/checkout-bug\')' },
+                    { type: 'success', text: 'HEAD is now at 8f3a2b1 Latest main commit' },
+                    { type: 'command', text: 'git worktree list', typing: true, delay: 800 },
+                    { type: 'output', text: '/home/user/myproject  a1b2c3d [feature-login]' },
+                    { type: 'output', text: '/home/user/hotfix     8f3a2b1 [hotfix/checkout-bug]' },
+                ],
+                gitGraph: { showFeature: true, showHotfix: true, activeCommit: 'main' }
+            },
+            {
+                step: 4,
+                title: 'Fix the Bug',
+                narrative: 'Now you have <strong>two terminals</strong>, two directories, one repo. Fix the bug in ~/hotfix while ~/myproject stays frozen.',
+                breadcrumb: [
+                    { text: '~/myproject', dot: 'branch' },
+                    { text: '~/hotfix', dot: 'hotfix', active: true },
+                    { text: 'fixing...', dot: 'modified' }
+                ],
+                fileTree: 'hotfix',
+                fileTreeRoot: 'hotfix',
+                showSplitTerminal: true,
+                actionText: 'Fix & Commit',
+                actionType: 'default',
+                mainTerminalFrozen: true,
+                commands: [
+                    { type: 'command', text: 'cd ../hotfix', typing: true },
+                    { type: 'command', text: 'vim src/checkout/payment.js', typing: true, delay: 400 },
+                    { type: 'comment', text: '# Fixed the null pointer bug...' },
+                    { type: 'command', text: 'git add -A && git commit -m "fix: checkout null pointer"', typing: true, delay: 600 },
+                    { type: 'success', text: '[hotfix/checkout-bug 9d8e7f6] fix: checkout null pointer' },
+                    { type: 'output', text: ' 1 file changed, 3 insertions(+), 1 deletion(-)' },
+                ],
+                gitGraph: { showFeature: true, showHotfix: true, activeCommit: 'hotfix' }
+            },
+            {
+                step: 5,
+                title: 'Clean Up',
+                narrative: 'Bug fixed and deployed! Now remove the worktree and delete the branch.',
+                breadcrumb: [
+                    { text: '~/myproject', dot: '', active: true },
+                    { text: 'feature-login', dot: 'branch' },
+                    { text: 'hotfix merged', dot: 'success' }
+                ],
+                fileTree: 'myproject',
+                showSplitTerminal: false,
+                actionText: 'Clean Up',
+                actionType: 'success',
+                commands: [
+                    { type: 'command', text: 'git worktree remove ../hotfix', typing: true },
+                    { type: 'success', text: 'Removing worktree \'../hotfix\'' },
+                    { type: 'command', text: 'git branch -d hotfix/checkout-bug', typing: true, delay: 500 },
+                    { type: 'output', text: 'Deleted branch hotfix/checkout-bug (was 9d8e7f6).' },
+                    { type: 'command', text: 'git worktree list', typing: true, delay: 500 },
+                    { type: 'output', text: '/home/user/myproject  a1b2c3d [feature-login]' },
+                ],
+                gitGraph: { showFeature: true, showHotfix: false, showMerge: true, activeCommit: 'feature' }
+            },
+            {
+                step: 6,
+                title: 'Back to Work',
+                narrative: 'Your feature branch is <span class="highlight">exactly as you left it</span>. No stash conflicts, no lost work, no context switching.',
+                breadcrumb: [
+                    { text: '~/myproject', dot: '', active: true },
+                    { text: 'feature-login', dot: 'branch' },
+                    { text: '3 files modified', dot: 'modified' }
+                ],
+                fileTree: 'myproject',
+                showSplitTerminal: false,
+                actionText: 'Restart Demo',
+                actionType: 'success',
+                commands: [
+                    { type: 'command', text: 'git status', typing: true },
+                    { type: 'output', text: 'On branch feature-login' },
+                    { type: 'output', text: 'Changes not staged for commit:' },
+                    { type: 'output', text: '  modified: src/auth/login.js' },
+                    { type: 'output', text: '  modified: src/components/LoginForm.jsx' },
+                    { type: 'output', text: 'Untracked files:' },
+                    { type: 'output', text: '  src/auth/oauth.js' },
+                    { type: 'comment', text: '# Everything exactly as you left it!' },
+                ],
+                gitGraph: { showFeature: true, showHotfix: false, showMerge: true, activeCommit: 'feature' }
+            }
+        ];
+
+        function renderFileTree(treeType) {
+            const container = document.getElementById('fileTreeContent');
+            const files = fileTreeStates[treeType] || fileTreeStates.myproject;
+            
+            container.innerHTML = files.map(file => {
+                const indent = '<span class="indent"></span>'.repeat(file.indent);
+                const icon = file.type === 'folder' 
+                    ? '<svg class="file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>'
+                    : '<svg class="file-tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+                const statusClass = file.status || '';
+                return `<div class="file-tree-item ${file.type} ${statusClass}">${indent}${icon}${file.name}</div>`;
+            }).join('');
+        }
+
+        function updateBreadcrumb(items) {
+            const container = document.getElementById('workflowBreadcrumb');
+            container.innerHTML = items.map((item, i) => {
+                const separator = i < items.length - 1 ? '<span class="breadcrumb-separator">→</span>' : '';
+                return `<span class="breadcrumb-item ${item.active ? 'active' : ''}">
+                    <span class="breadcrumb-dot ${item.dot}"></span>
+                    ${item.text}
+                </span>${separator}`;
+            }).join('');
+        }
+
+        function updateGitGraph(state) {
+            const svg = document.querySelector('.git-graph svg');
+            
+            // Feature branch elements
+            const featureLine = svg.querySelector('.feature-line');
+            const featureCommits = svg.querySelectorAll('.feature-commit');
+            const featureLabel = svg.querySelector('.feature-label');
+            const featureHead = svg.querySelector('.feature-head');
+            
+            if (state.showFeature) {
+                featureLine.style.opacity = '1';
+                featureCommits.forEach(c => c.style.opacity = '1');
+                featureLabel.style.opacity = '1';
+            } else {
+                featureLine.style.opacity = '0';
+                featureCommits.forEach(c => c.style.opacity = '0');
+                featureLabel.style.opacity = '0';
+            }
+            
+            // Hotfix branch elements
+            const hotfixLine = svg.querySelector('.hotfix-line');
+            const hotfixCommits = svg.querySelectorAll('.hotfix-commit');
+            const hotfixLabel = svg.querySelector('.hotfix-label');
+            
+            hotfixLine.style.opacity = state.showHotfix ? '1' : '0';
+            hotfixCommits.forEach(c => c.style.opacity = state.showHotfix ? '1' : '0');
+            hotfixLabel.style.opacity = state.showHotfix ? '1' : '0';
+            
+            // Merge commit
+            const mergeCommit = svg.querySelector('.merge-commit');
+            mergeCommit.style.opacity = state.showMerge ? '1' : '0';
+            
+            // HEAD indicator positioning
+            const mainHead = svg.querySelector('.main-head');
+            featureHead.style.opacity = state.activeCommit === 'feature' ? '1' : '0';
+            mainHead.style.opacity = state.activeCommit === 'main' || state.activeCommit === 'hotfix' ? '1' : '0';
+            
+            if (state.activeCommit === 'hotfix') {
+                mainHead.setAttribute('transform', 'translate(550, 80)');
+                mainHead.querySelector('rect').setAttribute('fill', 'var(--accent-tertiary)');
+            } else if (state.activeCommit === 'main') {
+                mainHead.setAttribute('transform', 'translate(350, 60)');
+                mainHead.querySelector('rect').setAttribute('fill', 'var(--accent-primary)');
+            }
+        }
+
+        async function typeCommand(text, element, speed = 50) {
+            isTyping = true;
+            element.textContent = '';
+            for (let i = 0; i < text.length; i++) {
+                if (!isTyping) break;
+                element.textContent += text[i];
+                await new Promise(r => setTimeout(r, speed));
+            }
+            isTyping = false;
+        }
+
+        async function runCommands(commands, outputElement, commandElement) {
+            const btn = document.getElementById('actionBtn');
+            btn.disabled = true;
+            
+            outputElement.innerHTML = '';
+            
+            for (const cmd of commands) {
+                if (cmd.delay) {
+                    await new Promise(r => setTimeout(r, cmd.delay));
+                }
+                
+                if (cmd.typing && cmd.type === 'command') {
+                    await typeCommand(cmd.text, commandElement);
+                    await new Promise(r => setTimeout(r, 300));
+                    
+                    const line = document.createElement('div');
+                    line.className = 'terminal-output-line command';
+                    line.textContent = cmd.text;
+                    outputElement.appendChild(line);
+                    commandElement.textContent = '';
+                } else {
+                    const line = document.createElement('div');
+                    line.className = `terminal-output-line ${cmd.type}`;
+                    line.textContent = cmd.text;
+                    outputElement.appendChild(line);
+                }
+                
+                await new Promise(r => setTimeout(r, 150));
+                outputElement.parentElement.scrollTop = outputElement.parentElement.scrollHeight;
+            }
+            
+            btn.disabled = false;
+        }
+
+        function showQuiz(quiz) {
+            const container = document.getElementById('quizContainer');
+            const question = document.getElementById('quizQuestion');
+            const options = document.getElementById('quizOptions');
+            const feedback = document.getElementById('quizFeedback');
+            
+            container.style.display = 'block';
+            question.textContent = quiz.question;
+            feedback.className = 'quiz-feedback';
+            feedback.textContent = '';
+            
+            options.innerHTML = quiz.options.map((opt, i) => 
+                `<button class="quiz-option" onclick="handleQuizAnswer(${i})">${opt.text}</button>`
+            ).join('');
+            
+            // Hide terminals during quiz
+            document.getElementById('terminalsContainer').style.display = 'none';
+            document.querySelector('.workflow-main').style.display = 'none';
+        }
+
+        function handleQuizAnswer(index) {
+            const scenario = workflowScenario[workflowStep];
+            const option = scenario.quiz.options[index];
+            const options = document.querySelectorAll('.quiz-option');
+            const feedback = document.getElementById('quizFeedback');
+            
+            options.forEach((opt, i) => {
+                opt.disabled = true;
+                if (i === index) {
+                    opt.classList.add(option.correct ? 'correct' : 'incorrect');
+                }
+                if (scenario.quiz.options[i].correct) {
+                    opt.classList.add('correct');
+                }
+            });
+            
+            feedback.textContent = option.feedback;
+            feedback.className = `quiz-feedback show ${option.correct ? 'correct' : 'incorrect'}`;
+            
+            // Always continue after a delay (shorter for correct, longer for wrong to read feedback)
+            const delay = option.correct ? 1500 : 2500;
+            setTimeout(() => {
+                document.getElementById('quizContainer').style.display = 'none';
+                document.getElementById('terminalsContainer').style.display = 'flex';
+                document.querySelector('.workflow-main').style.display = 'flex';
+                workflowStep++;
+                renderWorkflow();
+            }, delay);
+        }
+
+        function renderWorkflow() {
+            const scenario = workflowScenario[workflowStep];
+            
+            // Update step indicator
+            document.getElementById('stepText').textContent = `Step ${scenario.step} of 6`;
+            document.getElementById('stepTitle').textContent = scenario.title;
+            
+            // Update narrative
+            document.getElementById('workflowNarrative').innerHTML = scenario.narrative;
+            
+            // Update breadcrumb
+            updateBreadcrumb(scenario.breadcrumb);
+            
+            // Update file tree
+            document.getElementById('fileTreeRoot').textContent = scenario.fileTreeRoot || 'myproject';
+            renderFileTree(scenario.fileTree);
+            
+            // Update git graph
+            updateGitGraph(scenario.gitGraph);
+            
+            // Update action button
+            const btn = document.getElementById('actionBtn');
+            btn.querySelector('.action-btn-text').textContent = scenario.actionText;
+            btn.className = `action-btn ${scenario.actionType}`;
+            
+            // Handle split terminal
+            const hotfixTerminal = document.getElementById('terminalHotfix');
+            const mainTerminal = document.getElementById('terminalMain');
+            
+            if (scenario.showSplitTerminal) {
+                hotfixTerminal.style.display = 'flex';
+                mainTerminal.querySelector('.terminal-tab').classList.add('frozen');
+                mainTerminal.querySelector('.terminal-tab-title').textContent = '~/myproject (frozen)';
+            } else {
+                hotfixTerminal.style.display = 'none';
+                mainTerminal.querySelector('.terminal-tab').classList.remove('frozen');
+                mainTerminal.querySelector('.terminal-tab-title').textContent = '~/myproject';
+            }
+            
+            // Clear terminals
+            document.getElementById('terminalMainOutput').innerHTML = '';
+            document.getElementById('terminalMainCommand').textContent = '';
+            document.getElementById('terminalHotfixOutput').innerHTML = '';
+            document.getElementById('terminalHotfixCommand').textContent = '';
+            
+            // Show quiz if present
+            if (scenario.quiz) {
+                showQuiz(scenario.quiz);
+            } else {
+                document.getElementById('quizContainer').style.display = 'none';
+                document.getElementById('terminalsContainer').style.display = 'flex';
+                document.querySelector('.workflow-main').style.display = 'flex';
+            }
+        }
+
+        function executeAction() {
+            const scenario = workflowScenario[workflowStep];
+            
+            if (scenario.quiz) {
+                return; // Quiz handles its own progression
+            }
+            
+            if (workflowStep === workflowScenario.length - 1) {
+                // Restart
+                workflowStep = 0;
+                renderWorkflow();
+                return;
+            }
+            
+            // Run commands
+            const outputEl = scenario.showSplitTerminal 
+                ? document.getElementById('terminalHotfixOutput')
+                : document.getElementById('terminalMainOutput');
+            const commandEl = scenario.showSplitTerminal
+                ? document.getElementById('terminalHotfixCommand')
+                : document.getElementById('terminalMainCommand');
+            
+            runCommands(scenario.commands, outputEl, commandEl).then(() => {
+                setTimeout(() => {
+                    workflowStep++;
+                    renderWorkflow();
+                }, 1000);
+            });
+        }
+
+        // Keyboard shortcut
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !isTyping) {
+                const workflowSection = document.getElementById('workflow');
+                const rect = workflowSection.getBoundingClientRect();
+                if (rect.top < window.innerHeight && rect.bottom > 0) {
+                    executeAction();
+                }
+            }
+        });
+
+        // Initialize workflow
+        renderWorkflow();
+    </script>
+</body>
+</html>
